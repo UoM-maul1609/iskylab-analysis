@@ -40,8 +40,9 @@ BMM_TEMPLATE = (
 )
 BMM_EXECUTABLE = BMM_MODEL_FOLDER / "main.exe"
 
-# Model outputs and generated namelists are kept in the user's /tmp directory.
-OUTPUT_ROOT = Path("/tmp") / os.environ.get("USER", "iskylab")
+# Model outputs, generated namelists and derived results are kept in <repo>/runs
+# (ignored by git). Set ISKYLAB_RUNS to use another location.
+OUTPUT_ROOT = Path(os.environ.get("ISKYLAB_RUNS", REPO_ROOT / "runs"))
 SAVE_GENERATED_NAMELISTS = True
 
 # ---------------------------------------------------------------------------
@@ -81,7 +82,7 @@ CHAMBER_BUTTERWORTH_ORDER = 2
 CHAMBER_SMOOTH_WALL_AS_DELTA_T = True
 
 # Write one diagnostic PNG per experiment plus a CSV summary of the smoothing
-# corrections under /tmp/$USER/forcing_smoothing.
+# corrections under <repo>/runs/forcing_smoothing.
 SAVE_FORCING_SMOOTHING_DIAGNOSTICS = True
 
 # qtot_chamber can be written for diagnostic/sensitivity use without forcing

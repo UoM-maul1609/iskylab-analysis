@@ -3,3 +3,13 @@ references/
 .DS_Store
 iSKYLAB-data/modelOutput/
 ~\$*
+
+# model output / run logs / derived results (kept out of git)
+# all model runs and derived results live in runs/ (set ISKYLAB_RUNS to move them)
+runs/
+*.nc
+scripts/*.log
+scripts/failed_runs.txt
+analysis/**/*.png
+analysis/**/*.json
+analysis/**/*.csv

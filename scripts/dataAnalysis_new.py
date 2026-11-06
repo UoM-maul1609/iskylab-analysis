@@ -1031,6 +1031,36 @@ def chamber_spec_body(met, *, require_wall_temperature=False):
     return "\n".join(blocks)
 
 
+# ---------------------------------------------------------------------------
+# Sensitivity / counterfactual controls set from the command line.
+#   NAMELIST_OVERRIDES : {name: value} applied to the generated namelist last,
+#                        so they win over template and config values
+#                        (e.g. bin_scheme_flag=1, sce_flag=0, chamber_bl_mix=0).
+#   AEROSOL_ONLY       : None (all), 1 (keep external mode 1 only) or 2 (keep
+#                        external mode 2 only).  The removed mode keeps the same
+#                        scaling as in the full run, so the retained mode has
+#                        exactly the concentration it has in the mixture.
+# ---------------------------------------------------------------------------
+NAMELIST_OVERRIDES = {}
+AEROSOL_ONLY = None
+
+
+def _parse_override_value(raw):
+    low = raw.strip().lower()
+    if low in (".true.", "true", "t"):
+        return True
+    if low in (".false.", "false", "f"):
+        return False
+    try:
+        return int(raw)
+    except ValueError:
+        pass
+    try:
+        return float(raw)
+    except ValueError:
+        return raw
+
+
 def _aerosol_mode_arrays(exp, state, data):
     """Return BMM aerosol mode arrays derived from the fitted measured PSD."""
     key = f"InitialPNSD-{exp}"
@@ -1071,6 +1101,15 @@ def _aerosol_mode_arrays(exp, state, data):
         n2[:] = [0.0, 0.0, 1.0e3]
     elif len(n2_fit) < 3:
         n2[len(n2_fit) :] = 1.0e3
+
+    # Competition counterfactuals: remove one external mode, keeping the
+    # other at exactly its concentration in the mixture.
+    if AEROSOL_ONLY == 1:
+        n2[:] = [0.0, 0.0, 1.0e3]
+    elif AEROSOL_ONLY == 2:
+        if psd["num1"] <= 1:
+            raise ValueError(f"{exp} has only one aerosol component; --aerosol-only 2 is undefined")
+        n1[:] = [0.0, 0.0, 1.0e3]
 
     d1_out_um = np.full(3, 0.1)
     sig1_out = np.full(3, 0.5)
@@ -1352,6 +1391,9 @@ def make_namelist(exp, state, data, output_file, *, winit=1.3, scefile=None,
     text = _set_dynamic_array_slice(text, "inp_temp", inp_temp_c)
     text = set_literal_array(text, "inp_category(1:4)", aer["inp_category"])
     text = set_value(text, "n_inp_classes", int(inp_temp_c.size))
+
+    for name, value in NAMELIST_OVERRIDES.items():
+        text = set_value(text, name, value)
 
     return text, aer
 
@@ -3119,10 +3161,40 @@ if __name__ == "__main__":
             "after plt.show() so batch scripts can continue to the next run."
         ),
     )
+    parser.add_argument(
+        "--set", dest="namelist_set", action="append", default=[], metavar="NAME=VALUE",
+        help=(
+            "override any variable in the generated BMM namelist after all other "
+            "settings, e.g. --set bin_scheme_flag=1 --set sce_flag=0 "
+            "--set chamber_bl_mix=0 --set chamber_bl_evap_mode=1; repeatable"
+        ),
+    )
+    parser.add_argument(
+        "--aerosol-only", type=int, choices=(1, 2), default=None,
+        help=(
+            "competition counterfactual: keep only external aerosol mode 1 "
+            "(first component, e.g. AS or FA) or mode 2 (second, e.g. NaCl), "
+            "at its concentration in the mixture"
+        ),
+    )
+    parser.add_argument(
+        "--tag", default=None,
+        help="write outputs under OUTPUT_ROOT/<tag>/ so sensitivity runs do not overwrite the baseline",
+    )
     parser.add_argument("--no-run", action="store_true", help="analyse existing output without running BMM")
     parser.add_argument("--no-analysis", action="store_true", help="generate/run namelists only")
     parser.add_argument("--no-plot", action="store_true", help="do not display plots (saved diagnostics still written)")
     args = parser.parse_args()
+    for item in args.namelist_set:
+        if "=" not in item:
+            parser.error(f"--set expects NAME=VALUE, got {item!r}")
+        key, raw = item.split("=", 1)
+        NAMELIST_OVERRIDES[key.strip()] = _parse_override_value(raw)
+    AEROSOL_ONLY = args.aerosol_only
+    if args.tag:
+        cfg.OUTPUT_ROOT = cfg.OUTPUT_ROOT / args.tag
+    if NAMELIST_OVERRIDES or AEROSOL_ONLY or args.tag:
+        print(f"Overrides: {NAMELIST_OVERRIDES}; aerosol_only={AEROSOL_ONLY}; output root={cfg.OUTPUT_ROOT}")
     selected_group = THIS_RUN if args.group is None else args.group
     main(
         group=selected_group,
