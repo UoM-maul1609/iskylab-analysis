@@ -86,13 +86,13 @@ GROUP_UPDRAFT = [
 # Nominal injected aerosol targets supplied for the dust experiments [cm-3].
 # These are metadata only; the BMM initial number is still normalised from the
 # measured CPC/PNSD data by dataAnalysis_new.py.
-DUST_TARGETS_CM3 = {
+DUST_TARGETS_CM3 = {   # "Na Requested" in the Datasets-V2 Info files
     "Exp021": {"SDSA01": 1000.0},
     "Exp022": {"SDSA01": 3000.0, "NaCl": 2000.0},
-    "Exp023": {"SDSA01": 3000.0, "NaCl": 2000.0},
+    "Exp023": {"SDSA01": 3000.0, "NaCl": 2000.0},   # but 10712 cm-3 measured before expansion
     "Exp025": {"ATD03": 1000.0},
     "Exp026": {"ATD03": 1000.0, "NaCl": 4000.0},
-    "Exp027": {"ATD03": 1000.0, "NaCl": 4000.0},
+    "Exp027": {"ATD03": 1000.0, "NaCl": 10000.0},
 }
 
 DUST_EXPERIMENTS = set(DUST_TARGETS_CM3)

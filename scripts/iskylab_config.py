@@ -314,11 +314,14 @@ SINGLE_MODEL_ICE_PSD_MAX_UM = 10000.0
 # Dust aerosol / ice-active-site settings for AIDAd Exp020-023 and Exp025-027
 # ---------------------------------------------------------------------------
 # FHH adsorption coefficients are written into the BMM namelist by component.
-# SDSA01 uses the Kumar et al. fresh natural-mineral-dust fit as a proxy; ATD03
-# uses the dry-generated Arizona Test Dust fit from Kumar et al. (2009).
+# Both from Kumar, Sokolik and Nenes (2011, ACP 11, 3527), dry (soft-saltation)
+# generated fresh dust.  SDSA01: the paper's single set for all dusts
+# (A = 2.25 +/- 0.75, B = 1.20 +/- 0.10).  ATD03: the ATD fit in their Table 2
+# (A = 2.96 +/- 0.03, B = 1.28 +/- 0.03).  The earlier ATD03 values
+# (A = 0.27, B = 0.79) were replaced on the mixed-phase branch (14 Nov 2026).
 DUST_FHH = {
     "SDSA01": {"A": 2.25, "B": 1.20},
-    "ATD03":  {"A": 0.27, "B": 0.79},
+    "ATD03":  {"A": 2.96, "B": 1.28},
 }
 
 # BMM component category strings.  The actual ns(T) fits live in

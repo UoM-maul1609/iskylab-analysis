@@ -26,6 +26,7 @@
 #               different wall effect plus welas-inlet evaporation fits number and
 #               liquid water together.  Tags refit_p005 ... (offset in mK).
 #               Summarise with analysis/paper_figs/inlet_refit.py
+#   mp        : mixed-phase paper runs (see the block above the case statement)
 #   refitcomp : background-only runs at the refitted wall-air offsets for the
 #               coarse-NaCl mixtures (006 +0.005, 007 +0.005, 018 +0.02 K), so that
 #               competition can be recomputed with the inlet-refit wall settings.
@@ -139,9 +140,42 @@ set_refitcomp () {
   done
 }
 
+# -----------------------------------------------------------------------------
+# Mixed-phase paper (branch mixed-phase, 14 Nov 2026)
+#   mp      : mp_base  - all six dust runs (021, 022, 023, 025, 026, 027)
+#             mp_dust  - dust only (--aerosol-only 1) for the NaCl mixtures
+#                        022, 023, 026, 027 (paired with mp_base: competition)
+# Chamber settings: the warm paper's fixed fan-on set (tau = 10 s,
+# dT_BL = -0.09 K, p = 2, wall mode 0); t_sat from experiment_metadata.py.
+# Ice: Koop + INAS (iskylab_config.py), SDSA01 ns = Niemand x1, ATD03 ns =
+# Hiranuma et al. (2015); FHH from Kumar et al. (2011); wetting mode 0.
+# Outputs go to $ISKYLAB_RUNS/mp_*  (set ISKYLAB_RUNS to the main repo's runs/).
+# -----------------------------------------------------------------------------
+read -r -d '' MPRUNS <<'TABLE'
+Exp021 12
+Exp022 14
+Exp023 13
+Exp025 10
+Exp026 12
+Exp027 14
+TABLE
+MPMIX="Exp022 Exp023 Exp026 Exp027"
+mprun () {   # mprun <exp> <tag> <extra args...>
+  local exp=$1 tag=$2; shift 2
+  local tsat; tsat=$(echo "$MPRUNS" | awk -v e="$exp" '$1==e{print $2}')
+  echo "=== $tag  $exp ==="
+  $PY --experiment "$exp" --cloud-formation-time-min "$tsat" --bl-tau-s 10 \
+      --bl-evap-size-exp 2 --bl-wall-water-mode 0 --bl-temp-offset-k -0.09 \
+      --tag "$tag" $COMMON "$@" || echo "FAILED: $tag $exp" >> failed_runs.txt
+}
+set_mp () {
+  for e in $(echo "$MPRUNS" | awk '{print $1}'); do mprun $e mp_base; done
+  for e in $MPMIX; do mprun $e mp_dust --aerosol-only 1; done
+}
+
 case "${1:-all}" in
   baseline) set_baseline ;; nobl) set_nobl ;; comp) set_comp ;; mixtype) set_mixtype ;;
-  bins) set_bins ;; fixed) set_fixed ;; rhmeas) set_rhmeas ;; process) set_process ;; robust) set_robust ;; refit) set_refit ;; refitcomp) set_refitcomp ;;
+  bins) set_bins ;; fixed) set_fixed ;; rhmeas) set_rhmeas ;; process) set_process ;; robust) set_robust ;; refit) set_refit ;; refitcomp) set_refitcomp ;; mp) set_mp ;;
   all) set_baseline; set_nobl; set_comp; set_mixtype; set_bins; set_fixed; set_rhmeas; set_process ;;
   *) echo "unknown set $1"; exit 1 ;;
 esac
