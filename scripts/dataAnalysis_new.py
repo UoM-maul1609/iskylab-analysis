@@ -1273,8 +1273,14 @@ def make_namelist(exp, state, data, output_file, *, winit=1.3, scefile=None,
         raise ValueError("wall vapour transfer velocity must be >= 0 m s-1")
     if evap_size_exp < 0.0:
         raise ValueError("chamber BL evaporation size exponent must be >= 0")
+    # --set overrides are applied to the namelist text last, so take them into
+    # account here; otherwise e.g. --set chamber_bl_alpha_t=1 omits the
+    # wall_temp_chamber series and BMM stops.
+    eff_bl_mix = int(NAMELIST_OVERRIDES.get("chamber_bl_mix", bl_mix))
+    eff_alpha_t = float(NAMELIST_OVERRIDES.get("chamber_bl_alpha_t", cfg.CHAMBER_BL_ALPHA_T))
+    eff_wall_mode = int(NAMELIST_OVERRIDES.get("chamber_bl_wall_water_mode", wall_water_mode))
     need_wall_temperature = bool(
-        bl_mix and (cfg.CHAMBER_BL_ALPHA_T > 0.0 or wall_water_mode >= 1)
+        eff_bl_mix and (eff_alpha_t > 0.0 or eff_wall_mode >= 1)
     )
     if need_wall_temperature and "Tww mean" not in met:
         raise ValueError("BL thermal/wall-water processing requires measured Tww_mean")

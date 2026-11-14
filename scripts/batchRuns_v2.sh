@@ -145,8 +145,20 @@ set_refitcomp () {
 #   mp      : mp_base  - all six dust runs (021, 022, 023, 025, 026, 027)
 #             mp_dust  - dust only (--aerosol-only 1) for the NaCl mixtures
 #                        022, 023, 026, 027 (paired with mp_base: competition)
-# Chamber settings: the warm paper's fixed fan-on set (tau = 10 s,
-# dT_BL = -0.09 K, p = 2, wall mode 0); t_sat from experiment_metadata.py.
+# Chamber settings: tau = 10 s, p = 2, wall mode 0, and the BL temperature
+# T_BL = Tgas + alpha_T*(Twall - Tgas) with alpha_T = 0.25, dT_BL = 0.
+# alpha_T = tau_BL/tau_h, tau_h ~ 40 s from the dry-phase gas heat budget
+# (analysis/mixed_phase/wall_heat_budget.py).  The warm paper's
+# alpha_T = 0, dT_BL = -0.09 K caps RH at ~99.5 % at -20 C, so no dust activates
+# (tested 14 Nov; old runs kept as mp_base_cap, mp_dust_cap).  t_sat from
+# experiment_metadata.py.
+#   mpsens  : named sensitivity runs for Exp021 and Exp025:
+#             mp_nobl  - no wall mixing
+#             mp_aT1   - alpha_T = 1 (BL at the measured wall temperature)
+#             mp_wall2 - prognostic wall-water reservoir (mode 2, km = 1e-3 m/s;
+#                        ice phase below 0 C): frost on the wall is a sink
+#             mp_wet1  - IASD wetting mode 1, X >= 0.01
+#             mp_tau20 - tau = 20 s
 # Ice: Koop + INAS (iskylab_config.py), SDSA01 ns = Niemand x1, ATD03 ns =
 # Hiranuma et al. (2015); FHH from Kumar et al. (2011); wetting mode 0.
 # Outputs go to $ISKYLAB_RUNS/mp_*  (set ISKYLAB_RUNS to the main repo's runs/).
@@ -165,17 +177,37 @@ mprun () {   # mprun <exp> <tag> <extra args...>
   local tsat; tsat=$(echo "$MPRUNS" | awk -v e="$exp" '$1==e{print $2}')
   echo "=== $tag  $exp ==="
   $PY --experiment "$exp" --cloud-formation-time-min "$tsat" --bl-tau-s 10 \
-      --bl-evap-size-exp 2 --bl-wall-water-mode 0 --bl-temp-offset-k -0.09 \
+      --bl-evap-size-exp 2 --bl-wall-water-mode 0 --bl-temp-offset-k 0 \
+      --set chamber_bl_alpha_t=0.25 \
       --tag "$tag" $COMMON "$@" || echo "FAILED: $tag $exp" >> failed_runs.txt
 }
 set_mp () {
   for e in $(echo "$MPRUNS" | awk '{print $1}'); do mprun $e mp_base; done
   for e in $MPMIX; do mprun $e mp_dust --aerosol-only 1; done
 }
+# One closure for both papers?  T_BL = Tgas + alpha_T*(Twall - Tgas), no offset.
+# Warm runs: Twall - Tgas ~ -0.27 K, so alpha_T = 0.33 ~ the fitted dT_BL = -0.09 K.
+# Heat budget gives alpha_T ~ 0.25 for the mixed-phase runs; test both values.
+# Tags: alpha025, alpha033 (14 warm runs).
+set_alpha () {
+  for e in $(allexp); do
+    run $e alpha025 --bl-temp-offset-k 0 --set chamber_bl_alpha_t=0.25
+    run $e alpha033 --bl-temp-offset-k 0 --set chamber_bl_alpha_t=0.33
+  done
+}
+set_mpsens () {
+  for e in Exp021 Exp025; do
+    mprun $e mp_nobl  --set chamber_bl_mix=0
+    mprun $e mp_aT1   --set chamber_bl_alpha_t=1.0
+    mprun $e mp_wall2 --bl-wall-water-mode 2 --wall-vapour-transfer-velocity-ms 1.0e-3
+    mprun $e mp_wet1  --iasd-xthresh 0.01
+    mprun $e mp_tau20 --bl-tau-s 20
+  done
+}
 
 case "${1:-all}" in
   baseline) set_baseline ;; nobl) set_nobl ;; comp) set_comp ;; mixtype) set_mixtype ;;
-  bins) set_bins ;; fixed) set_fixed ;; rhmeas) set_rhmeas ;; process) set_process ;; robust) set_robust ;; refit) set_refit ;; refitcomp) set_refitcomp ;; mp) set_mp ;;
+  bins) set_bins ;; fixed) set_fixed ;; rhmeas) set_rhmeas ;; process) set_process ;; robust) set_robust ;; refit) set_refit ;; refitcomp) set_refitcomp ;; mp) set_mp ;; mpsens) set_mpsens ;; alpha) set_alpha ;;
   all) set_baseline; set_nobl; set_comp; set_mixtype; set_bins; set_fixed; set_rhmeas; set_process ;;
   *) echo "unknown set $1"; exit 1 ;;
 esac
