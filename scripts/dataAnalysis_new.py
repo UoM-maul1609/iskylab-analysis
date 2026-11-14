@@ -1172,7 +1172,13 @@ def make_namelist(exp, state, data, output_file, *, winit=1.3, scefile=None,
     text = read_text(cfg.BMM_TEMPLATE)
     met = data[f"MeteoCPC-{exp}"]
     n = len(met["Time"])
-    runtime = min(float(np.nanmax(met["Time"])), 30.0 * 60.0)
+    # Warm runs keep the historical 30 min cap.  The mixed-phase expansions last
+    # 32-38 min and the coldest (most ice-active) part comes last, so dust runs
+    # are simulated to the end of the measured forcing.
+    if exp in getattr(meta, "DUST_EXPERIMENTS", set()):
+        runtime = float(np.nanmax(met["Time"]))
+    else:
+        runtime = min(float(np.nanmax(met["Time"])), 30.0 * 60.0)
 
     # General initial/run controls.
     text = set_value(text, "outputfile", str(output_file))

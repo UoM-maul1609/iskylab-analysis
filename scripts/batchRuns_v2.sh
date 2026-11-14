@@ -195,6 +195,42 @@ set_alpha () {
     run $e alpha033 --bl-temp-offset-k 0 --set chamber_bl_alpha_t=0.33
   done
 }
+# Round 3 (14 Nov): alpha_T = 0.33 (best single value for the warm runs) and
+# wetting mode 1 for the NaCl mixtures, where mode 0 gives no dust activation.
+set_mp3 () {
+  for e in $(echo "$MPRUNS" | awk '{print $1}'); do mprun $e mp_a033 --set chamber_bl_alpha_t=0.33; done
+  for e in $MPMIX; do
+    mprun $e mp_wet1     --iasd-xthresh 0.01
+    mprun $e mp_wet1dust --iasd-xthresh 0.01 --aerosol-only 1
+  done
+}
+# Round 4: why does NaCl INCREASE ice with wetting mode 1?  ATD mixtures only.
+#   mp_wet1nf / mp_wet1nfdust : mode 1 without fall-out (is it INP loss by sedimentation?)
+#   mp_x001 / mp_x001dust     : Xthresh = 0.001
+#   mp_x1   / mp_x1dust       : Xthresh = 0.1
+set_mp4 () {
+  for e in Exp026 Exp027; do
+    mprun $e mp_wet1nf     --iasd-xthresh 0.01 --set fallout_flag=.false.
+    mprun $e mp_wet1nfdust --iasd-xthresh 0.01 --set fallout_flag=.false. --aerosol-only 1
+    mprun $e mp_x001       --iasd-xthresh 0.001
+    mprun $e mp_x001dust   --iasd-xthresh 0.001 --aerosol-only 1
+    mprun $e mp_x1         --iasd-xthresh 0.1
+    mprun $e mp_x1dust     --iasd-xthresh 0.1 --aerosol-only 1
+  done
+}
+# Warm paper check: is the simulated competition robust to the alpha_T closure?
+# Background-only partners for the mixtures at alpha_T = 0.33 (mixtures are in alpha033).
+set_alphacomp () {
+  for e in $MIXTURES; do run $e alpha033_bg --aerosol-only 1 --bl-temp-offset-k 0 --set chamber_bl_alpha_t=0.33; done
+}
+# Round 5: is the ice deficit a growth/fall-out problem?  Dust alone (021, 025).
+# Fall-out removes ice at Vt/H (H = 2.15 m), so crystals of ~150 um live seconds.
+#   mp_nf     : no fall-out (upper bound on airborne ice)
+set_mp5 () {
+  for e in Exp021 Exp025; do
+    mprun $e mp_nf  --set fallout_flag=.false.
+  done
+}
 set_mpsens () {
   for e in Exp021 Exp025; do
     mprun $e mp_nobl  --set chamber_bl_mix=0
@@ -207,7 +243,7 @@ set_mpsens () {
 
 case "${1:-all}" in
   baseline) set_baseline ;; nobl) set_nobl ;; comp) set_comp ;; mixtype) set_mixtype ;;
-  bins) set_bins ;; fixed) set_fixed ;; rhmeas) set_rhmeas ;; process) set_process ;; robust) set_robust ;; refit) set_refit ;; refitcomp) set_refitcomp ;; mp) set_mp ;; mpsens) set_mpsens ;; alpha) set_alpha ;;
+  bins) set_bins ;; fixed) set_fixed ;; rhmeas) set_rhmeas ;; process) set_process ;; robust) set_robust ;; refit) set_refit ;; refitcomp) set_refitcomp ;; mp) set_mp ;; mpsens) set_mpsens ;; alpha) set_alpha ;; mp3) set_mp3 ;; mp4) set_mp4 ;; alphacomp) set_alphacomp ;; mp5) set_mp5 ;;
   all) set_baseline; set_nobl; set_comp; set_mixtype; set_bins; set_fixed; set_rhmeas; set_process ;;
   *) echo "unknown set $1"; exit 1 ;;
 esac
