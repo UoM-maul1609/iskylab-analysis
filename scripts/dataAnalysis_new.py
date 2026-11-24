@@ -1154,6 +1154,7 @@ def _aerosol_mode_arrays(exp, state, data):
         "afhh": afhh4,
         "bfhh": bfhh4,
         "inp_category": inp_category4,
+        "components": components,
     }
 
 
@@ -1404,8 +1405,24 @@ def make_namelist(exp, state, data, output_file, *, winit=1.3, scefile=None,
     text = set_literal_array(text, "inp_category(1:4)", aer["inp_category"])
     text = set_value(text, "n_inp_classes", int(inp_temp_c.size))
 
+    # Optional &settable_ns group (BMM build of 16 Nov 2026), written only for the
+    # generic 'settable' ns category or when ns_fit_* is set explicitly, so the
+    # template and older BMM builds are unaffected otherwise.
+    settable = {}
+    if getattr(cfg, "DUST_NS_SETTABLE", False):
+        dust = next((c for c in aer.get("components", []) if c in cfg.DUST_NS_FIT), None)
+        if dust is not None:
+            settable = {f"ns_fit_{k}": v for k, v in cfg.DUST_NS_FIT[dust].items()}
+            if cfg.DUST_NS_FLAT:
+                settable["ns_fit_cold"] = 0.0
+    settable.update({k: v for k, v in NAMELIST_OVERRIDES.items() if k.startswith("ns_fit_")})
     for name, value in NAMELIST_OVERRIDES.items():
+        if name.startswith("ns_fit_"):
+            continue
         text = set_value(text, name, value)
+    if settable:
+        body = "".join(f"    {k} = {float(v):.6g},\n" for k, v in settable.items())
+        text = text.rstrip() + "\n\n&settable_ns\n" + body + "/\n"
 
     return text, aer
 

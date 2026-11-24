@@ -134,6 +134,13 @@ MODEL_SATURATION_TIME_OVERRIDES_S = {'Exp005': 8. * 60.0, \
 #                   activation and therefore hides any pre-cloud loss.
 AEROSOL_INIT_TIME = "cloud_onset"
 
+# Mixed-phase paper (16 Nov 2026): measured start + wall vapour sink.
+#   ISKYLAB_INITIAL_RH=dewpoint  -> start at the measured humidity (MBW dew point at t=0)
+#   ISKYLAB_AEROSOL_INIT=t0      -> aerosol normalised to the CPC at t=0 (no double-counted loss)
+# Defaults (unset) keep the warm-paper choices above.
+INITIAL_RH_METHOD = os.environ.get("ISKYLAB_INITIAL_RH", INITIAL_RH_METHOD).strip() or INITIAL_RH_METHOD
+AEROSOL_INIT_TIME = os.environ.get("ISKYLAB_AEROSOL_INIT", AEROSOL_INIT_TIME).strip() or AEROSOL_INIT_TIME
+
 # ---------------------------------------------------------------------------
 # Chamber boundary-layer treatment
 # ---------------------------------------------------------------------------
@@ -330,6 +337,28 @@ DUST_INP_CATEGORY = {
     "SDSA01": "sdsa01",
     "ATD03": "atd03",
 }
+# Mixed-phase paper (16 Nov 2026): settable ns(T) fit.  BMM has one generic category,
+# 'settable', whose coefficients are written to the optional namelist group
+# &settable_ns.  The dust-specific coefficients live here:
+#   ln ns[m-2] = b*Tc + a  for tc <= Tc <= twarm;  colder than tc, slope `cold` [K-1].
+# Defaults: least-squares fits to the dust-alone experiments Exp021 (SDSA01) and
+# Exp025 (ATD03).  Any coefficient can be overridden per run with --set ns_fit_b=...
+#   ISKYLAB_DUST_NS=settable       -> use these fits
+#   ISKYLAB_DUST_NS=settable_flat  -> the same, but ns held constant colder than tc
+# ("iskylab"/"iskylab_flat" are accepted as old names.)  Needs the BMM build of 16 Nov 2026.
+# Colder than tc, ns is held constant (cold = 0): the most active sites are used up
+# (PJC, 16 Nov 2026).  The model itself removes dust that has already frozen.  A
+# rising cold side can be tested with --set ns_fit_cold=0.517 (SDSA01) or 0.380 (ATD03),
+# the slopes of the published fits.
+DUST_NS_FIT = {
+    "SDSA01": {"b": -0.7640, "a": 2.634, "tc": -27.75, "cold": 0.0, "twarm": -18.0},
+    "ATD03":  {"b": -1.5437, "a": -13.511, "tc": -24.75, "cold": 0.0, "twarm": -18.0},
+}
+_DUST_NS = os.environ.get("ISKYLAB_DUST_NS", "").strip().replace("iskylab", "settable")
+DUST_NS_SETTABLE = _DUST_NS in ("settable", "settable_flat")
+DUST_NS_FLAT = _DUST_NS == "settable_flat"
+if DUST_NS_SETTABLE:
+    DUST_INP_CATEGORY = {k: "settable" for k in DUST_INP_CATEGORY}
 
 # Common cumulative IASD thresholds [deg C], ordered strictly from warm to cold.
 # The namelist generator now supports any number of classes and automatically
