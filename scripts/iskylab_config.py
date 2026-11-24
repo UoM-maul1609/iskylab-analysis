@@ -166,6 +166,10 @@ CHAMBER_BL_TEMP_OFFSET = 0.0  # K, optional unresolved BL sensible-temperature o
 # it should ultimately be constrained by humidity/wall-reservoir observations
 # or a Sherwood/Reynolds-number treatment rather than by cloud LWC alone.
 CHAMBER_WALL_VAPOUR_TRANSFER_VELOCITY = 1.0e-3
+# Wall water is liquid above this temperature (K) and ice below it (BMM chamber_wall_liquid_tmin).
+# 273.15 = stable bulk phase; set lower (e.g. 250) for a supercooled liquid wall.  Override per run with
+# --set chamber_wall_liquid_tmin=250.
+CHAMBER_WALL_LIQUID_TMIN = 273.15
 #CHAMBER_BL_TEMP_OFFSET = 0.09  # K, optional unresolved BL sensible-temperature offset
 
 # CHAMBER_BL_TAU = 50.  # s, chamber-scale BL processing/recirculation timescale
@@ -277,6 +281,12 @@ SINGLE_COMPARE_DROP_MIN_UM = 2.5
 # Both total and >Dmin curves/scores are always calculated and written; this
 # option only chooses which pair drives the headline ql lag/NRMSE metrics.
 SINGLE_COMPARE_QL_MODE = "above_min"
+# WELAS inlet observation operator (Sect. 4.6 of the warm paper): model droplets are shrunk by this
+# decrement in D^2 (um^2) before every comparison with WELAS.  0 = off.  Env ISKYLAB_INLET_DD2 overrides.
+WELAS_INLET_DD2_UM2 = float(os.environ.get("ISKYLAB_INLET_DD2", 21.0))
+# Comparison window for scores and fits: "full" = observed cloud onset to cloud end (WELAS liquid water above
+# 5 % of its peak), "curated" = the short windows in experiment_metadata.CLOUD_WINDOWS (v1.7 and earlier).
+COMPARE_WINDOW_MODE = os.environ.get("ISKYLAB_WINDOW", "full")
 
 # Direct WELAS/BMM PSD comparison grid.  WELAS has far more size channels than
 # the BMM has independent moving particle populations; putting each BMM point

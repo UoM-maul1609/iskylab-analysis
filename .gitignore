@@ -13,3 +13,5 @@ scripts/failed_runs.txt
 analysis/**/*.png
 analysis/**/*.json
 analysis/**/*.csv
+scripts/logs/
+scripts/failed_runs.txt

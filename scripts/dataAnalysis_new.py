@@ -45,6 +45,11 @@ Important implementation notes
   prognostic reservoir but computes a physical wall vapour mass flux from a
   transfer velocity and the vapour-pressure disequilibrium with measured Twall.
   In mode 2 wall vapour exchange is independent of ``chamber_bl_tau``.
+* ``--bl-wall-water-mode 3`` combines the two: the mode-2 finite-rate wall
+  flux acts on the chamber air at all times, and in cloud the mode-0
+  saturation cap removes any excess over wall saturation from the BL fraction
+  mixed each step (set by ``chamber_bl_tau``).  The removed water is stored on
+  the wall.  Use with ``--initial-rh`` set to the measured start humidity.
 * ``--sce-bins``/``--scebins`` creates a temporary copy of ``sce/namelist.in``,
   changes ``n_binsc`` only in that copy, and points the generated BMM namelist
   ``scefile`` at it.  The repository SCE namelist is never modified.
@@ -1043,6 +1048,7 @@ def chamber_spec_body(met, *, require_wall_temperature=False):
 # ---------------------------------------------------------------------------
 NAMELIST_OVERRIDES = {}
 AEROSOL_ONLY = None
+MODE2_SCALE = 1.0   # --mode2-scale: multiplies the number in external mode 2 (competition sweep)
 
 
 def _parse_override_value(raw):
@@ -1110,6 +1116,9 @@ def _aerosol_mode_arrays(exp, state, data):
         if psd["num1"] <= 1:
             raise ValueError(f"{exp} has only one aerosol component; --aerosol-only 2 is undefined")
         n1[:] = [0.0, 0.0, 1.0e3]
+    # Sweep of the second external mode (e.g. the added NaCl): multiply its number by MODE2_SCALE.
+    if MODE2_SCALE != 1.0:
+        n2 = n2 * MODE2_SCALE
 
     d1_out_um = np.full(3, 0.1)
     sig1_out = np.full(3, 0.5)
@@ -1263,8 +1272,8 @@ def make_namelist(exp, state, data, output_file, *, winit=1.3, scefile=None,
         raise ValueError("FORCE_QTOT=True requires WRITE_QTOT_DATA=True")
     if bl_mix not in (0, 1):
         raise ValueError("CHAMBER_BL_MIX must be 0 (off) or 1 (on)")
-    if wall_water_mode not in (0, 1, 2):
-        raise ValueError("chamber BL wall-water mode must be 0, 1, or 2")
+    if wall_water_mode not in (0, 1, 2, 3):
+        raise ValueError("chamber BL wall-water mode must be 0, 1, 2 or 3")
     if wall_liq_init_kg < 0.0 or wall_ice_init_kg < 0.0:
         raise ValueError("initial wall liquid/ice reservoirs must be non-negative kg")
     if not 0.0 <= wall_eff <= 1.0:
@@ -1288,6 +1297,7 @@ def make_namelist(exp, state, data, output_file, *, winit=1.3, scefile=None,
         "chamber_bl_tau": (cfg.CHAMBER_BL_TAU if bl_tau_s is None else float(bl_tau_s)),
         "chamber_bl_alpha_t": cfg.CHAMBER_BL_ALPHA_T,
         "chamber_bl_evap_mode": cfg.CHAMBER_BL_EVAP_MODE,
+        "chamber_bl_hom_fraction": getattr(cfg, "CHAMBER_BL_HOM_FRACTION", 0.5),
         "chamber_bl_evap_size_exp": evap_size_exp,
         # Keep the deprecated Fortran alias neutral.  This prevents an older
         # template value from overriding the new common exponent.
@@ -1301,6 +1311,7 @@ def make_namelist(exp, state, data, output_file, *, winit=1.3, scefile=None,
         "chamber_wall_vapour_transfer_velocity": wall_km,
         "chamber_wall_liquid_water_init": wall_liq_init_kg,
         "chamber_wall_ice_water_init": wall_ice_init_kg,
+        "chamber_wall_liquid_tmin": float(getattr(cfg, "CHAMBER_WALL_LIQUID_TMIN", 273.15)),
         "chamber_fan_loss": fan_loss,
         "chamber_fan_loss_kmax": cfg.CHAMBER_FAN_LOSS_KMAX,
         "chamber_fan_loss_d50_ref": cfg.CHAMBER_FAN_LOSS_D50_REF,
@@ -1317,6 +1328,10 @@ def make_namelist(exp, state, data, output_file, *, winit=1.3, scefile=None,
     # encountered; all established variables remain strict and must already
     # exist.  Anchored insertion keeps the additions inside &chamber_options.
     wall_water_schema = {
+        "chamber_bl_hom_fraction": (
+            "chamber_bl_evap_mode",
+            "Mixed evaporation (evap mode 3): fraction of the evaporation removed homogeneously; the rest inhomogeneously.",
+        ),
         "chamber_bl_evap_size_exp": (
             "chamber_bl_evap_mode",
             "Common evaporation size exponent p: homogeneous changes size, inhomogeneous changes number; p=2 is D2-based.",
@@ -1327,7 +1342,7 @@ def make_namelist(exp, state, data, output_file, *, winit=1.3, scefile=None,
         ),
         "chamber_bl_wall_water_mode": (
             "chamber_bl_temp_offset",
-            "Wall-vapour closure: 0=legacy; 1=reservoir relaxation; 2=physical finite-rate mass transfer.",
+            "Wall-vapour closure: 0=legacy; 1=reservoir relaxation; 2=physical finite-rate mass transfer; 3=mode 2 plus legacy cap.",
         ),
         "chamber_wall_water_efficiency": (
             "chamber_bl_wall_water_mode",
@@ -1344,6 +1359,10 @@ def make_namelist(exp, state, data, output_file, *, winit=1.3, scefile=None,
         "chamber_wall_ice_water_init": (
             "chamber_wall_liquid_water_init",
             "Initial physical ice/frost mass stored on the wall [kg]; default dry wall = 0.",
+        ),
+        "chamber_wall_liquid_tmin": (
+            "chamber_wall_ice_water_init",
+            "Wall water is liquid above this temperature [K] and ice below; 273.15 = stable phase, e.g. 250 = supercooled liquid wall.",
         ),
     }
     for name, value in chamber_values.items():
@@ -1943,6 +1962,28 @@ def _model_total_hydrometeor_moments_above(model, dmin_um):
     return out
 
 
+def apply_welas_inlet(model, dd2_um2):
+    """WELAS inlet observation operator: evaporate every warm model particle so that
+    D^2 falls by dd2_um2 (um^2), but not below its dry core.  dwet and mwat are updated
+    consistently (mwat = water mass per particle); nothing else is changed.  Applied
+    to the model only where it is compared with WELAS."""
+    dd2 = float(dd2_um2)
+    if dd2 <= 0.0 or "dwet" not in model:
+        return model
+    d = np.asarray(model["dwet"], dtype=float)
+    rho_w = 1000.0
+    d_new = np.sqrt(np.maximum(d**2 - dd2 * 1.0e-12, 0.0))
+    if "mwat" in model:
+        mw = np.asarray(model["mwat"], dtype=float)
+        vdry = np.maximum(np.pi / 6.0 * np.maximum(d, 0.0)**3 - np.maximum(mw, 0.0) / rho_w, 0.0)
+        ddry = (6.0 * vdry / np.pi)**(1.0 / 3.0)
+        d_new = np.where(np.isfinite(d), np.maximum(d_new, ddry), d)
+        model["mwat"] = np.where(np.isfinite(mw), np.maximum(
+            mw - rho_w * np.pi / 6.0 * (np.maximum(d, 0.0)**3 - d_new**3), 0.0), mw)
+    model["dwet"] = np.where(np.isfinite(d), d_new, d)
+    return model
+
+
 def _model_welas_equivalent_ql_above(model, dmin_um):
     """Return WELAS-equivalent BMM liquid water for Dwet > dmin_um.
 
@@ -2087,8 +2128,27 @@ def _model_psd_on_opc_grid(model, edges_um):
     )
 
 
+def _full_experiment_window(exp):
+    """Observed cloud onset to cloud end: WELAS liquid water in droplets > 2.5 um (30 s running mean) above 5 %
+    of its peak.  Used for fitting and scoring when cfg.COMPARE_WINDOW_MODE == "full"."""
+    import pandas as pd
+    f = cfg.REPO_ROOT / "iSKYLAB-data/Datasets-V2/Timeseries-During-Expansion" / f"iSKYLAB01-{exp}-2-OPC-d-MergedW.csv"
+    o = pd.read_csv(f, skipinitialspace=True)
+    cols = [c for c in o.columns[1:] if c.replace(".", "").isdigit()]
+    dm = np.array([float(c) for c in cols]) * 1e-6
+    n = np.nan_to_num(o[cols].values.astype(float)) * 0.00984 * 1e6
+    big = dm > 2.5e-6
+    lw = (n[:, big] * np.pi / 6 * 1000 * dm[big]**3).sum(1)
+    sm = pd.Series(lw).rolling(30, center=True, min_periods=5).mean().values
+    on = np.where(sm > 0.05 * np.nanmax(sm))[0]
+    t = o.iloc[:, 0].values.astype(float)
+    return np.array([float(t[on.min()]), float(t[on.max()])])
+
+
 def _cloud_comparison_window(exp, obs):
     """Choose a cloud comparison window, preferring curated metadata when available."""
+    if str(getattr(cfg, "COMPARE_WINDOW_MODE", "curated")).lower() == "full":
+        return _full_experiment_window(exp)
     if exp in meta.CLOUD_WINDOWS:
         return np.asarray(meta.CLOUD_WINDOWS[exp], dtype=float)
     onset = meta.CLOUD_ONSET.get(exp, float(obs["time"][0]))
@@ -2199,10 +2259,14 @@ def run_single_experiment(exp, state, data, *, winit=1.3, sce_bins=None,
         completed = subprocess.run(
             [str(cfg.BMM_EXECUTABLE), str(run_namelist)],
             cwd=cfg.BMM_MODEL_FOLDER,
-            check=True,
+            check=False,
             text=True,
             capture_output=True,
         )
+        if completed.returncode != 0:
+            print("BMM failed (exit %d). Last model output:" % completed.returncode)
+            print("\n".join((completed.stdout + "\n" + completed.stderr).strip().splitlines()[-40:]))
+            raise subprocess.CalledProcessError(completed.returncode, completed.args)
     if completed.stdout.strip():
         print(completed.stdout, end="" if completed.stdout.endswith("\n") else "\n")
     if completed.stderr.strip():
@@ -2218,6 +2282,7 @@ def analyse_single_experiment(exp, data, model_file, *, show=True,
     from matplotlib.colors import LogNorm
 
     model = readModel.readData(model_file, modelStr=exp)[exp]
+    model = apply_welas_inlet(model, getattr(cfg, "WELAS_INLET_DD2_UM2", 0.0))
 
     # The wall-reservoir diagnostics are newer than some readModel.py versions.
     # Read them directly from the NetCDF output when necessary so the analysis
@@ -2926,8 +2991,8 @@ def main(group=THIS_RUN, run_model=RUN_MODEL, do_analysis=DO_ANALYSIS, do_plot=D
         raise ValueError("--shift-cloud-measurements is currently only valid with --experiment")
     if bl_tau_s is not None and float(bl_tau_s) <= 0.0:
         raise ValueError("--bl-tau-s must be > 0")
-    if bl_wall_water_mode is not None and int(bl_wall_water_mode) not in (0, 1, 2):
-        raise ValueError("--bl-wall-water-mode must be 0, 1 or 2")
+    if bl_wall_water_mode is not None and int(bl_wall_water_mode) not in (0, 1, 2, 3):
+        raise ValueError("--bl-wall-water-mode must be 0, 1, 2 or 3")
     if wall_liquid_water_init_kg is not None and float(wall_liquid_water_init_kg) < 0.0:
         raise ValueError("--wall-liquid-water-init-kg must be >= 0")
     if wall_ice_water_init_kg is not None and float(wall_ice_water_init_kg) < 0.0:
@@ -3094,7 +3159,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--bl-wall-water-mode",
         type=int,
-        choices=(0, 1, 2),
+        choices=(0, 1, 2, 3),
         default=None,
         help=(
             "wall-vapour closure: 0=legacy saturation cap; "
@@ -3181,6 +3246,7 @@ if __name__ == "__main__":
         "--tag", default=None,
         help="write outputs under OUTPUT_ROOT/<tag>/ so sensitivity runs do not overwrite the baseline",
     )
+    parser.add_argument("--mode2-scale", type=float, default=1.0, help="multiply the number in external aerosol mode 2 (e.g. the added NaCl) by this factor")
     parser.add_argument("--no-run", action="store_true", help="analyse existing output without running BMM")
     parser.add_argument("--no-analysis", action="store_true", help="generate/run namelists only")
     parser.add_argument("--no-plot", action="store_true", help="do not display plots (saved diagnostics still written)")
@@ -3191,6 +3257,7 @@ if __name__ == "__main__":
         key, raw = item.split("=", 1)
         NAMELIST_OVERRIDES[key.strip()] = _parse_override_value(raw)
     AEROSOL_ONLY = args.aerosol_only
+    MODE2_SCALE = args.mode2_scale
     if args.tag:
         cfg.OUTPUT_ROOT = cfg.OUTPUT_ROOT / args.tag
     if NAMELIST_OVERRIDES or AEROSOL_ONLY or args.tag:

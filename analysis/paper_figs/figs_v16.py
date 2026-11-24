@@ -12,32 +12,38 @@ OBS, WITH, WITHOUT = "#444444", "#1f6fb4", "#d9822b"
 EXPS = ["Exp005","Exp006","Exp007","Exp008","Exp009","Exp010","Exp011","Exp013","Exp014","Exp015","Exp016","Exp017","Exp018","Exp019"]
 
 def window(exp):
-    m = {r["metric"]: r["value"] for r in csv.DictReader(open(T / "baseline/single_comparison" / f"metrics-{exp}.csv"))}
+    m = {r["metric"]: r["value"] for r in csv.DictReader(open(T / PT.FINAL / "single_comparison" / f"metrics-{exp}.csv"))}
     return float(m["window_start_s"]), float(m["window_end_s"])
 def obs_n(exp, thr=2.5):
     o = pd.read_csv(DATA / f"iSKYLAB01-{exp}-2-OPC-d-MergedW.csv", skipinitialspace=True)
     cols = [c for c in o.columns[1:] if c.replace(".", "").isdigit()]
     dm = np.array([float(c) for c in cols]); n = np.nan_to_num(o[cols].values.astype(float)) * 0.00984
     return o.iloc[:, 0].values.astype(float), n[:, dm > thr].sum(1)
+sys.path.insert(0, str(REPO / "scripts")); import dataAnalysis_new as DA
+sys.path.insert(0, str(Path(__file__).resolve().parent)); import paper_tags as PT
+
 def mod(tag, exp):
     with Dataset(T / tag / "single_comparison" / f"output-{exp}.nc") as nc:
-        t = nc["time"][:]; n = nc["nwat"][:]; d = nc["dwet"][:]; rho = nc["p"][:] / (287.0 * nc["t"][:]); nd = nc["ndrop"][:]
+        t = nc["time"][:]; rho = nc["p"][:] / (287.0 * nc["t"][:]); nd = nc["ndrop"][:]
+        mm = DA.apply_welas_inlet({"dwet": np.asarray(nc["dwet"][:]), "mwat": np.asarray(nc["mwat"][:])}, DA.cfg.WELAS_INLET_DD2_UM2)   # WELAS inlet operator
+        n = np.asarray(nc["nwat"][:]); d = mm["dwet"]
     big = d > 2.5e-6
     n25 = (n * big).sum(axis=(1, 2)) * rho / 1e6
     ql25 = (np.pi / 6 * 1000 * n * d**3 * big).sum(axis=(1, 2))
     return np.asarray(t), np.asarray(n25), np.asarray(nd * rho / 1e6), np.asarray(ql25)
 def wmean(t, x, w): s = (t >= w[0]) & (t <= w[1]); return float(np.nanmean(x[s]))
 
-s = pd.read_csv(T / "sensitivity_summary.csv")
+def met(tag, e):
+    return {r["metric"]: float(r["value"]) for r in csv.DictReader(open(T / tag / "single_comparison" / f"metrics-{e}.csv")) if r["value"].replace(".", "").replace("-", "").replace("e", "").isdigit()}
 rows = []
 for e in EXPS:
     w = window(e); to, no = obs_n(e)
     r = {"exp": e, "obs_N25": wmean(to, no, w)}
-    for tag in ("baseline", "nobl"):
-        t, n25, nact, ql = mod(tag, e)
+    for tag, src in (("baseline", PT.FINAL), ("nobl", PT.NOBL)):     # labels kept; data = final runs through the inlet
+        t, n25, nact, ql = mod(src, e)
         r[f"{tag}_N25"] = wmean(t, n25, w)
-        m = s[(s.tag == tag) & (s.experiment == e)].iloc[0]
-        r[f"{tag}_Iq_mod"] = m.integrated_ql_model_kg_s_kg; r["Iq_obs"] = m.integrated_ql_obs_kg_s_kg
+        m = met(src, e)
+        r[f"{tag}_Iq_mod"] = m["integrated_ql_model_kg_s_kg"]; r["Iq_obs"] = m["integrated_ql_obs_kg_s_kg"]
     rows.append(r)
 df = pd.DataFrame(rows); df.to_csv(OUT / "with_without_mixing.csv", index=False)
 
@@ -47,7 +53,7 @@ _data = _d.load_all_data(["Exp013"]); _o = _d._observed_bulk_series("Exp013", _d
 fig = plt.figure(figsize=(9, 7.6)); gs = fig.add_gridspec(2, 2, height_ratios=[0.8, 1.2])
 a0 = fig.add_subplot(gs[0, :]); ax = [fig.add_subplot(gs[1, 0]), fig.add_subplot(gs[1, 1])]
 a0.plot(_o["time"] / 60, pd.Series(_o["ql_above_min"] * 1e3).rolling(15, center=True, min_periods=3).mean(), color=OBS, lw=1.1, label="observed (WELAS)")
-for tag, col, name in [("nobl", WITHOUT, "model, no wall mixing"), ("baseline", WITH, "model, with wall mixing")]:
+for tag, col, name in [(PT.NOBL, WITHOUT, "model, no wall mixing"), (PT.FINAL, WITH, "model, with wall mixing")]:
     t, n25, nact, ql = mod(tag, "Exp013"); a0.plot(t / 60, ql * 1e3, color=col, lw=1.8, label=name)
 a0.set_xlim(8, 29); a0.set_xlabel("Time since start of expansion (min)"); a0.set_ylabel("$q_l$ (g kg$^{-1}$)")
 a0.set_title("(a) Liquid water in Exp013 (fan on)", loc="left", fontsize=10); a0.legend(frameon=False, fontsize=8); a0.spines[["top", "right"]].set_visible(False)
@@ -57,7 +63,7 @@ for a, (mcol, ocol, lab, unit, scale) in zip(ax, [("_Iq_mod", "Iq_obs", "(b) Tim
         m = df[f"{tag}{mcol}"].values * scale
         a.scatter(o, m, color=col, marker=mk, s=34, label=name, zorder=3)
         for xi, yi, e in zip(o, m, df.exp):
-            if e == "Exp005" and mcol == "_Iq_mod": a.annotate("fan off", (xi, yi), fontsize=7, color=col, xytext=(-30, 6), textcoords="offset points")
+            if e == "Exp005" and mcol == "_Iq_mod": a.annotate("Exp005 (fan off)", (xi, yi), fontsize=7, color=col, xytext=(-8, 0), textcoords="offset points", ha="right", va="center")
     lo = min(o.min(), df[[f"nobl{mcol}", f"baseline{mcol}"]].values.min() * scale) * 0.6; hi = max(o.max(), df[[f"nobl{mcol}", f"baseline{mcol}"]].values.max() * scale) * 1.6
     xx = np.array([lo, hi]); a.plot(xx, xx, color="k", lw=1); a.fill_between(xx, xx / 2, xx * 2, color="0.9", zorder=0, label="within a factor of 2")
     a.set_xscale("log"); a.set_yscale("log"); a.set_xlim(lo, hi); a.set_ylim(lo, hi); a.set_aspect("equal")

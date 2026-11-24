@@ -16,7 +16,7 @@ INK, MUTED = "#222222", "#666666"
 C = {"baseline": "#1f6fb4", "hom": "#d9822b", "p0": "#7b4ea3", "obs": "#444444", "nobl": "#b03a2e"}
 
 def window(exp):
-    m = {r["metric"]: r["value"] for r in csv.DictReader(open(T / "baseline/single_comparison" / f"metrics-{exp}.csv"))}
+    m = {r["metric"]: r["value"] for r in csv.DictReader(open(T / PT.FINAL / "single_comparison" / f"metrics-{exp}.csv"))}
     return float(m["window_start_s"]), float(m["window_end_s"])
 
 def obs_n(exp, thr=2.5):
@@ -25,21 +25,33 @@ def obs_n(exp, thr=2.5):
     dm = np.array([float(c) for c in cols]); n = np.nan_to_num(o[cols].values.astype(float)) * 0.00984
     return o.iloc[:, 0].values.astype(float), n[:, dm > thr].sum(1)
 
-def mod_n(tag, exp, thr=2.5, per_mode=False):
+sys.path.insert(0, str(REPO / "scripts")); import dataAnalysis_new as DA
+sys.path.insert(0, str(Path(__file__).resolve().parent)); import paper_tags as PT
+
+def mod_n(tag, exp, thr=2.5, per_mode=False, inlet=True):
     with Dataset(T / tag / "single_comparison" / f"output-{exp}.nc") as nc:
-        t = nc["time"][:]; n = nc["nwat"][:]; d = nc["dwet"][:]; rho = nc["p"][:] / (287.0 * nc["t"][:])
+        t = nc["time"][:]; n = nc["nwat"][:]; d = np.asarray(nc["dwet"][:]); rho = nc["p"][:] / (287.0 * nc["t"][:])
+        if inlet:   # WELAS inlet operator (Sect. 4.6)
+            d = DA.apply_welas_inlet({"dwet": d, "mwat": np.asarray(nc["mwat"][:])}, DA.cfg.WELAS_INLET_DD2_UM2)["dwet"]
     nm = (n * (d > thr * 1e-6)).sum(axis=2) * np.asarray(rho)[:, None] / 1e6
     return (t, nm) if per_mode else (t, nm.sum(1))
 
 # ------------------------------------------------------------------ mixing type
-s = pd.read_csv(T / "sensitivity_summary.csv")
-s["Rq"] = s.integrated_ql_model_kg_s_kg / s.integrated_ql_obs_kg_s_kg
+EXPS = ["Exp005","Exp006","Exp007","Exp008","Exp009","Exp010","Exp011","Exp013","Exp014","Exp015","Exp016","Exp017","Exp018","Exp019"]
+SRC = {"baseline": PT.FINAL, "hom": PT.HOM, "p0": PT.P0}      # final runs, scored through the WELAS inlet
+rows = []
+for tag, src in SRC.items():
+    for e in EXPS:
+        m = {r["metric"]: r["value"] for r in csv.DictReader(open(T / src / "single_comparison" / f"metrics-{e}.csv"))}
+        rows.append(dict(tag=tag, experiment=e, ndrop_psd_nrmse=float(m["ndrop_psd_nrmse"]), deff_nrmse=float(m["deff_nrmse"]),
+                         Rq=float(m["integrated_ql_model_kg_s_kg"]) / float(m["integrated_ql_obs_kg_s_kg"])))
+s = pd.DataFrame(rows)
 fig, ax = plt.subplots(1, 2, figsize=(10, 3.6), gridspec_kw={"width_ratios": [1.4, 1]})
 to, no = obs_n("Exp013"); ax[0].plot(to / 60, pd.Series(no).rolling(15, center=True, min_periods=3).mean(), color=C["obs"], lw=1.2, label="WELAS")
 for tag, lab in [("baseline", "inhomogeneous, size-weighted (baseline)"), ("hom", "homogeneous ($D^2$ decrement)"), ("p0", "inhomogeneous, uniform ($p=0$)")]:
-    t, n = mod_n(tag, "Exp013"); ax[0].plot(t / 60, n, color=C[tag], lw=1.5, label=lab)
-w = window("Exp013"); ax[0].axvspan(w[0] / 60, w[1] / 60, color="0.9", zorder=0)
-ax[0].set_xlabel("Experiment time (min)"); ax[0].set_ylabel("$N$ ($D>2.5$ µm) (cm$^{-3}$)"); ax[0].set_title("(a) Exp013", loc="left")
+    t, n = mod_n(SRC[tag], "Exp013"); ax[0].plot(t / 60, n, color=C[tag], lw=1.5, label=lab)
+
+ax[0].set_xlabel("Time since start of expansion (min)"); ax[0].set_ylabel("$N$ ($D>2.5$ µm) (cm$^{-3}$)"); ax[0].set_title("(a) Exp013", loc="left")
 ax[0].legend(frameon=False, fontsize=7.5); ax[0].set_xlim(8, 29)
 tags = ["baseline", "hom", "p0"]; metrics = [("ndrop_psd_nrmse", "$N$ NRMSE"), ("deff_nrmse", "$D_{\\rm eff}$ NRMSE"), ("Rq", "$R_q$")]
 x = np.arange(len(metrics)); wd = 0.26

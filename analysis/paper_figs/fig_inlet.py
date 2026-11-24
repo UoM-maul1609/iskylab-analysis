@@ -12,13 +12,13 @@ EX = ["Exp005","Exp006","Exp007","Exp008","Exp009","Exp010","Exp011","Exp013","E
 DD2 = 12.0  # um^2
 TH = np.array([2.5, 3, 3.5, 4, 5, 6, 7, 8])
 def win(e):
-    m = {r["metric"]: r["value"] for r in csv.DictReader(open(T / "baseline/single_comparison" / f"metrics-{e}.csv"))}; return float(m["window_start_s"]), float(m["window_end_s"])
+    m = {r["metric"]: r["value"] for r in csv.DictReader(open(T / "v19_final" / "single_comparison" / f"metrics-{e}.csv"))}; return float(m["window_start_s"]), float(m["window_end_s"])
 def welas(e, s="d-MergedW"):
     o = pd.read_csv(D / f"iSKYLAB01-{e}-2-OPC-{s}.csv", skipinitialspace=True); cols = [c for c in o.columns[1:] if c.replace(".", "").isdigit()]
     dm = np.array([float(c) for c in cols]); f = np.nan_to_num(o[cols].values.astype(float)); lg = np.log10(dm)
     ed = np.r_[lg[0] - (lg[1] - lg[0]) / 2, (lg[1:] + lg[:-1]) / 2, lg[-1] + (lg[-1] - lg[-2]) / 2]
     return o.iloc[:, 0].values.astype(float), dm, f * np.diff(ed)
-DDS = np.array([0, 2, 4, 6, 8, 10, 12, 16.0]); OP = {"n25": [], "n5": [], "q25": []}
+DDS = np.array([0, 4, 8, 12, 16, 21, 25, 30.0]); OP = {"n25": [], "n5": [], "q25": []}
 rows = []; R = []; RC = []
 for e in EX:
     w = win(e)
@@ -63,7 +63,7 @@ b.scatter(df.nobs5, df.nmod5, marker="o", color="#1f6fb4", s=36, label="droplets
 b.set_xscale("log"); b.set_yscale("log"); b.set_xlim(lo, hi); b.set_ylim(lo, hi); b.set_aspect("equal")
 b.set_xlabel("Observed, WELAS (cm$^{-3}$)"); b.set_ylabel("Model (cm$^{-3}$)"); b.legend(frameon=False, fontsize=7.5, loc="upper left")
 b.set_title("(b) Model against observations\n(no shrinkage)", loc="left", fontsize=10)
-RF = OUT / "inlet_refit_all.csv"
+RF = OUT / "inlet_refit_all_v19.csv"
 d_ = ax[3]
 if RF.exists():
     rf = pd.read_csv(RF); Qs = ["lwc25", "n25", "n5"]
