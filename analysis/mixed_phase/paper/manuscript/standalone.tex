@@ -1,0 +1,58 @@
+%% Stand-alone build of the iSKYLAB mixed-phase paper (draft v0.3); main.tex is the Copernicus version.
+\documentclass[10pt,a4paper]{article}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,graphicx,booktabs,array,xcolor}
+\usepackage[round,authoryear]{natbib}
+\usepackage{lineno}
+\usepackage{xurl}
+\usepackage[hidelinks]{hyperref}
+\usepackage{authblk}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+\linenumbers
+\renewcommand{\floatpagefraction}{0.8}
+\newcommand{\todo}[1]{\textcolor{red!70!black}{[TODO: #1]}}
+\newcommand{\um}{\,\ensuremath{\mu}m}
+\newcommand{\cmc}{\,cm$^{-3}$}
+\newcommand{\dTBL}{\ensuremath{\Delta T_\mathrm{BL}}}
+\newcommand{\ns}{\ensuremath{n_\mathrm{s}}}
+\newcommand{\introduction}{\section{Introduction}}
+\newcommand{\conclusions}{\section{Conclusions}}
+\newcommand{\noappendix}{}
+\newcommand{\codeavailability}[1]{\section*{Code and data availability}#1}
+\newcommand{\authorcontribution}[1]{\section*{Author contributions}#1}
+\newcommand{\competinginterests}[1]{\section*{Competing interests}#1}
+\newenvironment{acknowledgements}{\section*{Acknowledgements}}{}
+\title{Does salt suppress ice formation on mineral dust by competing for water vapour? iSKYLAB mixed-phase experiments in the AIDAd cloud chamber}
+\author[1]{Paul J. Connolly}
+\author[2,a]{Nsikanabasi S. Umo}
+\author[2]{Robert Wagner}
+\author[3]{Xiaotian Xu}
+\author[3]{Wenhan Tang}
+\author[3]{Nicole Riemer}
+\author[1]{Rachel James}
+\author[1]{Bowen Z. Portman}
+\author[4,7]{Ruyin Chu}
+\author[4]{Zhaoze Deng}
+\author[5]{Najin Kim}
+\author[5,6]{Seong Soo Yum}
+\author[2]{Ottmar M\"ohler}
+\affil[1]{Centre for Atmospheric Science, Department of Earth and Environmental Sciences, The University of Manchester, Manchester, UK}
+\affil[2]{Institute of Meteorology and Climate Research Atmospheric Aerosol Research (IMKAAF), Karlsruhe Institute of Technology, Karlsruhe, Germany}
+\affil[3]{Department of Climate, Meteorology and Atmospheric Sciences, University of Illinois Urbana-Champaign, Urbana, IL, USA}
+\affil[4]{State Key Laboratory of Atmospheric Environment and Extreme Meteorology, Institute of Atmospheric Physics, Chinese Academy of Sciences, Beijing, China}
+\affil[5]{Climate and Environmental Research Institute, Korea Institute of Science and Technology, Seoul, South Korea}
+\affil[6]{Department of Atmospheric Sciences, Yonsei University, Seoul, South Korea}
+\affil[7]{College of Earth and Planetary Sciences, University of Chinese Academy of Sciences, Beijing, China}
+\affil[a]{now at: Department of Chemistry and Biochemistry, University of North Carolina Wilmington, Wilmington, NC, USA}
+\date{Working draft v0.3, 17 November 2026\\ \small Correspondence: Paul J. Connolly (p.connolly@manchester.ac.uk) and Ottmar M\"ohler (ottmar.moehler@kit.edu)}
+\begin{document}
+\maketitle
+\begin{abstract}\noindent
+\input{abstract.tex}
+\end{abstract}
+\input{body.tex}
+\end{document}

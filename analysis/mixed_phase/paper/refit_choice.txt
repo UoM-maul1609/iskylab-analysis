@@ -1,0 +1,13 @@
+# exp mode dTBL_K   (best liquid-phase fit; see refit_score.py)
+Exp021 0 0.35
+Exp021 1 0.35
+Exp022 0 -0.03
+Exp022 1 -0.03
+Exp023 0 0.1
+Exp023 1 0.05
+Exp025 0 0.05
+Exp025 1 0.05
+Exp026 0 -0.03
+Exp026 1 0.2
+Exp027 0 0.03
+Exp027 1 0.2

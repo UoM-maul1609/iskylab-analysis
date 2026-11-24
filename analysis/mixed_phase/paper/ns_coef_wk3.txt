@@ -1,0 +1,5 @@
+# mode dust b a tc cold   (ns_calibrate.py; ln ns = b*Tc + a down to tc, then slope cold)
+0 SDSA01 -0.7640 4.278 -27.75 0.0
+1 SDSA01 -0.7640 4.333 -27.75 0.0
+0 ATD03 -1.5437 -12.429 -24.75 0.0
+1 ATD03 -1.5437 -12.453 -24.75 0.0

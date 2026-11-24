@@ -1,0 +1,7 @@
+# exp km_m_per_s   (best fit to MBW total water before cloud onset; wall_score.py)
+Exp021 3.0e-04
+Exp022 3.0e-04
+Exp023 5.0e-04
+Exp025 5.0e-04
+Exp026 3.0e-04
+Exp027 3.0e-04
