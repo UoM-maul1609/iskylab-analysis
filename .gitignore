@@ -13,3 +13,7 @@ scripts/failed_runs.txt
 analysis/**/*.png
 analysis/**/*.json
 analysis/**/*.csv
+
+# mixed-phase paper: superseded figures and built PDFs
+analysis/mixed_phase/paper/figs/superseded/
+analysis/mixed_phase/paper/manuscript/*.pdf
